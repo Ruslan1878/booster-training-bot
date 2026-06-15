@@ -1148,8 +1148,10 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         if analysis:
             text = f"🤖 *Разбор от AI-тренера:*\n\n{analysis}"
+        elif not GEMINI_API_KEY:
+            text = "🤖 *Разбор недоступен* — переменная GEMINI_API_KEY не найдена в окружении."
         else:
-            text = "🤖 *Разбор недоступен* — не настроен GEMINI_API_KEY.\n\nИзучи ошибки самостоятельно по материалам модулей."
+            text = "🤖 *Ошибка при получении разбора.* Проверь логи Railway для деталей."
         
         keyboard = InlineKeyboardMarkup([
             [InlineKeyboardButton("🔄 Пройти снова", callback_data="menu_test")],
@@ -1266,7 +1268,16 @@ async def get_ai_analysis(errors, correct, total, score_pct):
                 json={"contents": [{"parts": [{"text": prompt}]}]}
             )
             data = response.json()
-            return data["candidates"][0]["content"]["parts"][0]["text"]
+            logger.info(f"Gemini response status: {response.status_code}")
+            logger.info(f"Gemini response: {str(data)[:500]}")
+            if "candidates" in data:
+                return data["candidates"][0]["content"]["parts"][0]["text"]
+            elif "error" in data:
+                logger.error(f"Gemini API error: {data['error']}")
+                return f"Ошибка API: {data['error'].get('message', 'неизвестная ошибка')}"
+            else:
+                logger.error(f"Unexpected Gemini response: {data}")
+                return None
     except Exception as e:
         logger.error(f"Gemini analysis error: {e}")
         return None
