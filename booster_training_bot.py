@@ -1,5 +1,7 @@
 import logging
 import random
+import os
+import httpx
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     Application, CommandHandler, CallbackQueryHandler,
@@ -10,6 +12,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 TOKEN = "8968926971:AAFLDtLbqGY7tMgzSeO5dm-kXu9AqvG4MX8"
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 
 # ============================================================
 # КОНТЕНТ МОДУЛЕЙ
@@ -251,7 +254,24 @@ AmoCRM — это CRM-система где ведутся все сделки (
 *После каждого контакта:*
 1. Написать примечание — что обсудили
 2. Передвинуть сделку на следующий этап
-3. Поставить задачу — когда и что делать дальше"""
+3. Поставить задачу — когда и что делать дальше""",
+
+            """🏷️ *Теги и источники клиентов*
+
+*Как понять откуда пришёл клиент — через ТЕГИ в сделке.*
+
+Тег = метка источника трафика. Маркетинг создаёт рекламу с уникальными тегами, ты видишь по какому объявлению написал клиент.
+
+*Где смотреть креативы и теги:*
+У нас есть Telegram канал — *Креативы Booster*.
+Там маркетинг (Дима) выкладывает все актуальные рекламные материалы с тегами.
+
+*Зачем это менеджеру:*
+• Понять что именно заинтересовало клиента
+• Говорить на встрече про то что он уже видел
+• Аналитика — какая реклама приводит платящих клиентов
+
+*Правило:* всегда смотри тег в сделке перед звонком — это контекст клиента."""
         ]
     },
     5: {
@@ -794,7 +814,7 @@ ALL_QUESTIONS = [
     {"q": "Клиент написал в Instagram час назад, менеджер только увидел. Что делать?", "options": ["Написать извинение за долгий ответ и начать диалог", "Позвонить немедленно — переписка уже не поможет", "Ответить в переписке как будто только что увидел", "Передать лидоруб — сообщение уже остыло"], "answer": 0},
     {"q": "Что означает этап 'Принимают решение' в воронке AmoCRM?", "options": ["Клиент изучает документы перед подписанием договора", "Клиент думает после встречи — ещё не дал ответ", "Банк принимает решение по заявке на рассрочку", "Клиент выбирает между двумя филиалами Booster"], "answer": 1},
     {"q": "Менеджер трижды позвонил клиенту — не берёт трубку. Правильные действия:", "options": ["Закрыть сделку как недозвон и искать новых клиентов", "Написать в мессенджер и поставить задачу на другое время", "Передать сделку другому менеджеру — этот клиент потерян", "Позвонить ещё пять раз подряд пока не ответит"], "answer": 1},
-    {"q": "Какое поле в сделке помогает понять откуда пришёл клиент?", "options": ["Поле 'Какая боль' — там клиент описывает свою проблему", "Поле 'Откуда клиент' — Instagram, Facebook, 2ГИС и другие", "Поле 'ПП' — там указан первичный принявший менеджер", "Поле 'Теги' — там маркируется источник трафика"], "answer": 1},
+    {"q": "Какое поле в сделке помогает понять откуда пришёл клиент?", "options": ["Поле 'Какая боль' — там клиент описывает свою проблему", "Поле 'Откуда клиент' — Instagram, Facebook, 2ГИС и другие", "Поле 'ПП' — там указан первичный принявший менеджер", "Поле 'Теги' — там маркируется источник трафика"], "answer": 3},
     {"q": "Что нужно обязательно указать при назначении встречи в сделке?", "options": ["Только дату и время — остальное заполним после встречи", "Время встречи, филиал, класс ребёнка и язык консультации", "Только филиал и имя клиента для навигатора", "Бюджет клиента и предполагаемую программу обучения"], "answer": 1},
     {"q": "Рабочий стол в AmoCRM показывает задачи красным цветом. Что это значит?", "options": ["Высокоприоритетные VIP-клиенты требующие особого внимания", "Задачи просрочены — нужно выполнить немедленно", "Задачи на сегодня — нужно сделать до конца рабочего дня", "Задачи назначенные лично РОПом с особым контролем"], "answer": 1},
     {"q": "Для чего в AmoCRM существует раздел imBox?", "options": ["Внутренний чат между менеджерами и РОПом", "Все входящие сообщения из Instagram, WhatsApp, Facebook", "Архив закрытых сделок для анализа и обучения", "Входящие звонки зафиксированные системой Звандау"], "answer": 1},
@@ -1079,6 +1099,38 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data == "test_finish":
         await show_test_results(query, context)
 
+    # AI разбор ошибок
+    elif data == "test_ai_analysis":
+        answers = context.user_data.get("test_answers", [])
+        if not answers:
+            await query.edit_message_text("Нет данных теста. Пройди тест сначала.")
+            return
+        
+        total = len(answers)
+        correct = sum(1 for a in answers if a["is_correct"])
+        score_pct = round(correct / total * 100)
+        errors = [a for a in answers if not a["is_correct"]]
+
+        await query.edit_message_text("🤖 AI анализирует твои ошибки... Подожди 10-15 секунд.")
+        
+        analysis = await get_ai_analysis(errors, correct, total, score_pct)
+        
+        if analysis:
+            text = f"🤖 *Разбор от AI-тренера:*\n\n{analysis}"
+        else:
+            text = "🤖 *Разбор недоступен* — не настроен GEMINI_API_KEY.\n\nИзучи ошибки самостоятельно по материалам модулей."
+        
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("🔄 Пройти снова", callback_data="menu_test")],
+            [InlineKeyboardButton("📚 К обучению", callback_data="menu_training")],
+            [InlineKeyboardButton("🏠 Главное меню", callback_data="main_menu")]
+        ])
+        
+        if len(text) > 4000:
+            text = text[:3900] + "..."
+        
+        await query.edit_message_text(text, parse_mode="Markdown", reply_markup=keyboard)
+
     # Начало теста
     elif data == "menu_test":
         questions = random.sample(ALL_QUESTIONS, min(100, len(ALL_QUESTIONS)))
@@ -1146,6 +1198,49 @@ async def send_test_question(query, context):
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
+async def get_ai_analysis(errors, correct, total, score_pct):
+    """Получить AI-разбор ошибок через Gemini API"""
+    if not GEMINI_API_KEY:
+        return None
+
+    error_summary = []
+    for err in errors[:25]:
+        right = err["options"][err["correct"]]
+        wrong = err["options"][err["selected"]]
+        error_summary.append(f"Вопрос: {err['q']}\nОтветил: {wrong}\nПравильно: {right}")
+
+    errors_text = "\n---\n".join(error_summary)
+
+    prompt = f"""Ты тренер по продажам образовательного центра Booster (Астана). Менеджер прошёл тест.
+
+Результат: {correct}/{total} ({score_pct}%)
+{"ТЕСТ ПРОЙДЕН" if score_pct >= 80 else "ТЕСТ НЕ ПРОЙДЕН"}
+
+Ошибки менеджера:
+{errors_text}
+
+Напиши короткий персональный разбор (не более 300 слов):
+1. Общая оценка результата (1-2 предложения)
+2. Главные слабые зоны (2-3 конкретные темы где были ошибки)
+3. Что нужно повторить в первую очередь
+4. Один конкретный совет для улучшения
+
+Пиши по-русски, как опытный наставник — честно, конкретно, без воды. Без эмодзи и markdown форматирования."""
+
+    try:
+        async with httpx.AsyncClient(timeout=30) as client:
+            response = await client.post(
+                f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={GEMINI_API_KEY}",
+                headers={"content-type": "application/json"},
+                json={"contents": [{"parts": [{"text": prompt}]}]}
+            )
+            data = response.json()
+            return data["candidates"][0]["content"]["parts"][0]["text"]
+    except Exception as e:
+        logger.error(f"Gemini analysis error: {e}")
+        return None
+
+
 async def show_test_results(query, context):
     answers = context.user_data["test_answers"]
     total = len(answers)
@@ -1156,7 +1251,6 @@ async def show_test_results(query, context):
     result_emoji = "🎉" if passed else "😔"
     result_text = "ТЕСТ ПРОЙДЕН!" if passed else "ТЕСТ НЕ ПРОЙДЕН"
 
-    # Сбор ошибок
     errors = [a for a in answers if not a["is_correct"]]
 
     text = (
@@ -1167,28 +1261,24 @@ async def show_test_results(query, context):
 
     if errors:
         text += f"❌ *Ошибки ({len(errors)} вопросов):*\n\n"
-        for i, err in enumerate(errors[:30], 1):  # Показываем первые 30
+        for i, err in enumerate(errors[:20], 1):
             right_opt = err["options"][err["correct"]]
             selected_opt = err["options"][err["selected"]]
             text += f"{i}. {err['q']}\n   ❌ Ты: {selected_opt}\n   ✅ Правильно: {right_opt}\n\n"
+        if len(errors) > 20:
+            text += f"...и ещё {len(errors)-20} ошибок\n\n"
 
-        if len(errors) > 30:
-            text += f"...и ещё {len(errors)-30} ошибок\n\n"
+    text += "📸 Сделай скрин результата."
 
-    if not passed:
-        text += "📸 Сделай скрин результата и пересдай тест после изучения ошибок."
-    else:
-        text += "📸 Сделай скрин результата."
+    if len(text) > 3800:
+        text = text[:3700] + "\n\n...список обрезан. Сделай скрин."
 
     keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton("🤖 Получить разбор от AI", callback_data="test_ai_analysis")],
         [InlineKeyboardButton("🔄 Пройти снова", callback_data="menu_test")],
         [InlineKeyboardButton("📚 Вернуться к обучению", callback_data="menu_training")],
         [InlineKeyboardButton("🏠 Главное меню", callback_data="main_menu")]
     ])
-
-    # Если текст слишком длинный — разбиваем
-    if len(text) > 4000:
-        text = text[:3900] + "\n\n...список обрезан. Сделай скрин и изучи ошибки."
 
     await query.edit_message_text(
         text, parse_mode="Markdown",
