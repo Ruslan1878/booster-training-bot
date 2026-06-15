@@ -1099,6 +1099,37 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data == "test_finish":
         await show_test_results(query, context)
 
+    # Показать ошибки постранично
+    elif data.startswith("test_show_errors_"):
+        page = int(data.split("_")[-1])
+        answers = context.user_data.get("test_answers", [])
+        errors = [a for a in answers if not a["is_correct"]]
+        
+        per_page = 10
+        start = page * per_page
+        end = start + per_page
+        page_errors = errors[start:end]
+        total_pages = (len(errors) + per_page - 1) // per_page
+        
+        text = f"❌ *Ошибки — страница {page+1}/{total_pages}* ({len(errors)} всего):\n\n"
+        for i, err in enumerate(page_errors, start + 1):
+            right_opt = err["options"][err["correct"]]
+            selected_opt = err["options"][err["selected"]]
+            text += f"*{i}.* {err['q']}\n   ❌ {selected_opt}\n   ✅ {right_opt}\n\n"
+        
+        nav = []
+        if page > 0:
+            nav.append(InlineKeyboardButton("◀️ Назад", callback_data=f"test_show_errors_{page-1}"))
+        if end < len(errors):
+            nav.append(InlineKeyboardButton("Далее ▶️", callback_data=f"test_show_errors_{page+1}"))
+        
+        keyboard_rows = []
+        if nav:
+            keyboard_rows.append(nav)
+        keyboard_rows.append([InlineKeyboardButton("🔙 К результату", callback_data="menu_test")])
+        
+        await query.edit_message_text(text, parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(keyboard_rows))
+
     # AI разбор ошибок
     elif data == "test_ai_analysis":
         answers = context.user_data.get("test_answers", [])
@@ -1250,40 +1281,25 @@ async def show_test_results(query, context):
 
     result_emoji = "🎉" if passed else "😔"
     result_text = "ТЕСТ ПРОЙДЕН!" if passed else "ТЕСТ НЕ ПРОЙДЕН"
-
     errors = [a for a in answers if not a["is_correct"]]
 
-    text = (
+    # Сообщение 1 — итог
+    summary = (
         f"{result_emoji} *{result_text}*\n\n"
         f"Результат: *{correct}/{total}* ({score_pct}%)\n"
-        f"Проходной балл: 80%\n\n"
+        f"Проходной балл: 80%\n"
+        f"Ошибок: {len(errors)}\n\n"
+        f"📸 Сделай скрин этого сообщения."
     )
-
-    if errors:
-        text += f"❌ *Ошибки ({len(errors)} вопросов):*\n\n"
-        for i, err in enumerate(errors[:20], 1):
-            right_opt = err["options"][err["correct"]]
-            selected_opt = err["options"][err["selected"]]
-            text += f"{i}. {err['q']}\n   ❌ Ты: {selected_opt}\n   ✅ Правильно: {right_opt}\n\n"
-        if len(errors) > 20:
-            text += f"...и ещё {len(errors)-20} ошибок\n\n"
-
-    text += "📸 Сделай скрин результата."
-
-    if len(text) > 3800:
-        text = text[:3700] + "\n\n...список обрезан. Сделай скрин."
 
     keyboard = InlineKeyboardMarkup([
         [InlineKeyboardButton("🤖 Получить разбор от AI", callback_data="test_ai_analysis")],
+        [InlineKeyboardButton("📋 Показать все ошибки", callback_data="test_show_errors_0")],
         [InlineKeyboardButton("🔄 Пройти снова", callback_data="menu_test")],
-        [InlineKeyboardButton("📚 Вернуться к обучению", callback_data="menu_training")],
         [InlineKeyboardButton("🏠 Главное меню", callback_data="main_menu")]
     ])
 
-    await query.edit_message_text(
-        text, parse_mode="Markdown",
-        reply_markup=keyboard
-    )
+    await query.edit_message_text(summary, parse_mode="Markdown", reply_markup=keyboard)
 
 def main():
     app = Application.builder().token(TOKEN).build()
