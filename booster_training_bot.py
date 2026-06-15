@@ -1164,6 +1164,10 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=get_situation_keyboard(next_id)
         )
 
+    # Досрочное завершение теста
+    elif data == "test_finish":
+        await show_test_results(query, context)
+
     # Начало теста
     elif data == "menu_test":
         questions = random.sample(ALL_QUESTIONS, min(100, len(ALL_QUESTIONS)))
@@ -1207,6 +1211,7 @@ async def send_test_question(query, context):
     keyboard = []
     for i, opt in enumerate(q["options"]):
         keyboard.append([InlineKeyboardButton(f"{chr(65+i)}. {opt}", callback_data=f"test_ans_{i}")])
+    keyboard.append([InlineKeyboardButton(f"🏁 Завершить тест ({idx}/{total} отвечено)", callback_data="test_finish")])
 
     progress = f"Вопрос {idx+1}/{total} | ✅ {correct_so_far}"
     text = f"*{progress}*\n\n❓ {q['q']}"
