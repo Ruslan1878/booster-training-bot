@@ -780,14 +780,14 @@ ALL_QUESTIONS = [
     {"q": "Что такое Booster по определению?", "options": ["Репетиторский центр", "Образовательный центр готовящий к спецшколам и ЕНТ", "Языковая школа", "Государственная школа"], "answer": 1},
     {"q": "Какой главный конкурент Booster в Астане?", "options": ["Newton", "Today", "Aiplus", "Зердели"], "answer": 2},
     {"q": "Через какой мессенджер ведётся основная переписка с клиентами?", "options": ["Telegram", "Instagram и WhatsApp через AmoCRM", "Email", "Facebook"], "answer": 1},
-    {"q": "Какой процент клиентов платит через рассрочку?", "options": ["50%", "65%", "85%", "95%"], "answer": 2},
+    
     {"q": "Какие банки-партнёры работают с Booster?", "options": ["Только Каспи", "Каспи и Халык", "Каспи, Хоум, Халык, БЦК", "Все банки Казахстана"], "answer": 2},
     {"q": "Что произошло с банковскими одобрениями с января 2026?", "options": ["Улучшились", "Остались такими же", "Участились отказы", "Банки прекратили сотрудничество"], "answer": 2},
     {"q": "Сколько учеников в одной группе?", "options": ["5-7", "8-12", "15-20", "20-25"], "answer": 1},
     {"q": "Для кого предназначен Telegram бот @BoosterBookingBot?", "options": ["Только для сотрудников", "Для записи учеников на обучение", "Для оплаты", "Для общения с преподавателями"], "answer": 1},
     {"q": "Что такое КЭВ в продажах Booster?", "options": ["Клиентский Этап Взаиморасчётов", "Ключевой Этап Воронки — встреча", "Контроль Эффективности Воронки", "Квалификация и Единый Взнос"], "answer": 1},
-    {"q": "Конверсия КЭВ→Оплата в Booster составляет:", "options": ["10%", "15%", "23%", "40%"], "answer": 2},
-    {"q": "Какая целевая конверсия КЭВ→Оплата?", "options": ["30%", "40-55%", "60%", "80%"], "answer": 1},
+    
+    
     {"q": "Что означает ПП в поле сделки AmoCRM?", "options": ["Первый Платёж", "Первично Принял (лидоруб)", "Приоритетный Покупатель", "Подготовительная Программа"], "answer": 1},
     {"q": "Кто такие хантеры в Booster?", "options": ["Менеджеры которые ведут встречи и закрывают сделки", "Маркетологи", "Преподаватели", "Кураторы"], "answer": 0},
     {"q": "Кто такие лидорубы в Booster?", "options": ["Менеджеры закрывающие сделки", "Менеджеры обрабатывающие первичные обращения", "Преподаватели", "Операторы колл-центра"], "answer": 1},
@@ -976,7 +976,6 @@ ALL_QUESTIONS = [
     {"q": "Если клиент спрашивает о скидках:", "options": ["Всегда давать скидку", "Предложить рассрочку как альтернативу", "Категорически отказать", "Скидка 5% всегда"], "answer": 1},
     {"q": "Кто принимает решение о скидке?", "options": ["Любой менеджер", "Только РОП или выше", "Администратор", "Сам менеджер если хочет"], "answer": 1},
     {"q": "Что значит 'горячий лид'?", "options": ["Злой клиент", "Клиент который только что написал и максимально заинтересован", "VIP клиент", "Клиент который давно думает"], "answer": 1},
-    {"q": "Конверсия лид→оплата в Booster:", "options": ["10%", "4%", "15%", "23%"], "answer": 1},
     {"q": "Что нельзя говорить клиенту о конкурентах?", "options": ["Что они существуют", "Негативную информацию, критику, плохие отзывы", "Их название", "Что вы их знаете"], "answer": 1},
     {"q": "Если клиент оставил заявку в 23:00:", "options": ["Звонить сразу", "Написать сразу, позвонить утром рабочего дня", "Ждать пока сам не позвонит", "Передать другой смене"], "answer": 1},
     {"q": "Формат встречи в Booster — это:", "options": ["Групповая презентация", "Индивидуальная консультация с ребёнком и родителем", "Только тест ребёнка без родителей", "Лекция о программе"], "answer": 1},
@@ -1045,14 +1044,12 @@ def get_page_keyboard(mod_id, page, total_pages):
     return InlineKeyboardMarkup(keyboard)
 
 def get_situation_keyboard(sit_id, show_answer=False, selected=None):
-    situation = next(s for s in SITUATIONS if s["id"] == sit_id)
     keyboard = []
     if not show_answer:
-        for letter, text, _ in situation["options"]:
-            keyboard.append([InlineKeyboardButton(
-                f"{letter}. {text[:40]}...",
-                callback_data=f"sit_{sit_id}_ans_{letter}"
-            )])
+        row = []
+        for letter, text, _ in next(s for s in SITUATIONS if s["id"] == sit_id)["options"]:
+            row.append(InlineKeyboardButton(f"{letter}", callback_data=f"sit_{sit_id}_ans_{letter}"))
+        keyboard.append(row)
     else:
         keyboard.append([InlineKeyboardButton("➡️ Следующая ситуация", callback_data=f"sit_next_{sit_id}")])
     keyboard.append([InlineKeyboardButton("📋 К модулям", callback_data="menu_training")])
@@ -1132,8 +1129,8 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data.startswith("sit_") and data.endswith("_start"):
         sit_id = int(data.split("_")[1])
         situation = next(s for s in SITUATIONS if s["id"] == sit_id)
-        options_text = "\n".join([f"{l}. {t}" for l, t, _ in situation["options"]])
-        text = f"🎭 *{situation['title']}*\n\n{situation['description']}\n\n{options_text}"
+        options_text = "\n".join([f"*{l}.* {t}" for l, t, _ in situation["options"]])
+        text = f"🎭 *{situation['title']}*\n\n{situation['description']}\n\n{options_text}\n\n👇 Выбери ответ:"
         await query.edit_message_text(
             text, parse_mode="Markdown",
             reply_markup=get_situation_keyboard(sit_id)
@@ -1160,8 +1157,8 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         sit_id = int(data.split("_")[2])
         next_id = sit_id + 1 if sit_id < len(SITUATIONS) else 1
         situation = next(s for s in SITUATIONS if s["id"] == next_id)
-        options_text = "\n".join([f"{l}. {t}" for l, t, _ in situation["options"]])
-        text = f"🎭 *{situation['title']}*\n\n{situation['description']}\n\n{options_text}"
+        options_text = "\n".join([f"*{l}.* {t}" for l, t, _ in situation["options"]])
+        text = f"🎭 *{situation['title']}*\n\n{situation['description']}\n\n{options_text}\n\n👇 Выбери ответ:"
         await query.edit_message_text(
             text, parse_mode="Markdown",
             reply_markup=get_situation_keyboard(next_id)
