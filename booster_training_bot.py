@@ -778,7 +778,6 @@ ALL_QUESTIONS = [
     {"q": "Что даёт система FOX?", "options": ["Скидки на обучение", "Баллы которые превращаются в призы", "Дополнительные занятия", "Бесплатные кружки"], "answer": 1},
     {"q": "Сколько видов кружков есть в Booster?", "options": ["5", "7", "9", "12"], "answer": 2},
     {"q": "Что такое Booster по определению?", "options": ["Репетиторский центр", "Образовательный центр готовящий к спецшколам и ЕНТ", "Языковая школа", "Государственная школа"], "answer": 1},
-    {"q": "Какой главный конкурент Booster в Астане?", "options": ["Newton", "Today", "Aiplus", "Зердели"], "answer": 2},
     {"q": "Через какой мессенджер ведётся основная переписка с клиентами?", "options": ["Telegram", "Instagram и WhatsApp через AmoCRM", "Email", "Facebook"], "answer": 1},
     
     {"q": "Какие банки-партнёры работают с Booster?", "options": ["Только Каспи", "Каспи и Халык", "Каспи, Хоум, Халык, БЦК", "Все банки Казахстана"], "answer": 2},
@@ -984,8 +983,6 @@ ALL_QUESTIONS = [
     {"q": "Почему нельзя обещать 100% поступление в НИШ?", "options": ["Это нескромно", "Это невозможно гарантировать и нечестно по отношению к клиенту", "РОП запретил", "Клиентам не нравятся обещания"], "answer": 1},
     {"q": "Оптимальная реакция на жалобу клиента:", "options": ["Защищать компанию", "Выслушать, извиниться за неудобство, предложить решение", "Передать жалобу РОПу и уйти", "Объяснить почему клиент не прав"], "answer": 1},
     {"q": "Зачем менеджеру знать конкурентов?", "options": ["Для сплетен", "Чтобы грамотно отвечать на сравнения и показывать ценность Booster", "Чтобы переманивать их клиентов нечестно", "Это не нужно"], "answer": 1},
-    {"q": "Newton — это:", "options": ["Государственная школа", "Конкурент Booster на рынке образовательных центров Астаны", "Партнёр Booster", "Онлайн платформа"], "answer": 1},
-    {"q": "Aiplus на рынке образования Астаны:", "options": ["Слабый игрок", "Лидер рынка — главный конкурент", "Наш партнёр", "Государственная программа"], "answer": 1},
     {"q": "Что важнее на встрече — говорить или слушать?", "options": ["Говорить — рассказывать всё о Booster", "Слушать — понять что важно клиенту, затем говорить под его запрос", "Поровну", "Зависит от клиента"], "answer": 1},
     {"q": "После оплаты клиента нужно:", "options": ["Забыть о нём — сделка закрыта", "Передать информацию кураторам и проследить за онбордингом", "Сразу попросить рекомендацию", "Только выдать чек"], "answer": 1},
 
@@ -1178,17 +1175,21 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Ответ на вопрос теста
     elif data.startswith("test_ans_"):
-        ans_idx = int(data.split("_")[2])
+        pos_idx = int(data.split("_")[2])
         questions = context.user_data.get("test_questions", [])
         idx = context.user_data.get("test_index", 0)
         answers = context.user_data.get("test_answers", [])
 
         if idx < len(questions):
             q = questions[idx]
-            is_correct = (ans_idx == q["answer"])
+            # Переводим позицию кнопки в оригинальный индекс
+            shuffled = context.user_data.get("shuffled", {}).get(idx, list(range(len(q["options"]))))
+            orig_ans_idx = shuffled[pos_idx]
+            is_correct = (orig_ans_idx == q["answer"])
+            # Для отображения ошибок сохраняем оригинальные индексы
             answers.append({
                 "q": q["q"],
-                "selected": ans_idx,
+                "selected": orig_ans_idx,
                 "correct": q["answer"],
                 "options": q["options"],
                 "is_correct": is_correct
@@ -1208,9 +1209,19 @@ async def send_test_question(query, context):
     total = len(questions)
     correct_so_far = sum(1 for a in context.user_data["test_answers"] if a["is_correct"])
 
+    # Перемешиваем варианты, запоминаем новый порядок
+    shuffled_indices = list(range(len(q["options"])))
+    random.shuffle(shuffled_indices)
+    
+    # Сохраняем порядок для правильной проверки ответа
+    if "shuffled" not in context.user_data:
+        context.user_data["shuffled"] = {}
+    context.user_data["shuffled"][idx] = shuffled_indices
+
     keyboard = []
-    for i, opt in enumerate(q["options"]):
-        keyboard.append([InlineKeyboardButton(f"{chr(65+i)}. {opt}", callback_data=f"test_ans_{i}")])
+    for pos, orig_i in enumerate(shuffled_indices):
+        opt = q["options"][orig_i]
+        keyboard.append([InlineKeyboardButton(f"{chr(65+pos)}. {opt}", callback_data=f"test_ans_{pos}")])
     keyboard.append([InlineKeyboardButton(f"🏁 Завершить тест ({idx}/{total} отвечено)", callback_data="test_finish")])
 
     progress = f"Вопрос {idx+1}/{total} | ✅ {correct_so_far}"
